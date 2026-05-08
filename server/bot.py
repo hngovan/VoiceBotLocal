@@ -41,6 +41,7 @@ import wave
 from pipecat.runner.types import DailyRunnerArguments
 import aiofiles
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.processors.aggregators.llm_response_universal import AssistantTurnStoppedMessage, UserTurnStoppedMessage
 import io
 from vieneu_service import VieNeuTTSService
@@ -81,8 +82,10 @@ async def run_bot(transport: BaseTransport):
 
     # Speech-to-Text service
     stt = WhisperSTTService(
+        ttfs_p99_latency=float(os.getenv("WHISPER_TTFS_P99", "1.5")),
         settings=WhisperSTTService.Settings(
             model=os.getenv("OPENAI_MODEL"),
+            language=os.getenv("WHISPER_LANGUAGE", "vi"),
         ),
     )
 
@@ -96,17 +99,31 @@ async def run_bot(transport: BaseTransport):
         settings=OLLamaLLMService.Settings(
             model=os.getenv("OLLAMA_MODEL"),
             system_instruction=(
-                    "Bạn là chuyên viên tư vấn ngân hàng chuyên nghiệp và thân thiện. "
-                    "Nhiệm vụ của bạn là hỗ trợ khách hàng về các vấn đề ngân hàng như: "
-                    "tài khoản thanh toán, tiết kiệm, vay vốn, thẻ tín dụng, chuyển tiền, "
-                    "lãi suất, sản phẩm tài chính và các dịch vụ ngân hàng khác. "
-                    "Luôn trả lời bằng tiếng Việt, lịch sự và dễ hiểu. "
-                    "Nếu câu hỏi cần thông tin cập nhật như lãi suất hoặc chính sách mới nhất, "
-                    "hãy nói ngắn gọn 'Để có thông tin chính xác, tôi sẽ tra cứu ngay.' rồi dùng công cụ tìm kiếm. "
-                    "Sau khi có kết quả, tóm tắt trong 2 đến 3 câu ngắn, không liệt kê toàn bộ dữ liệu. "
-                    "Câu trả lời sẽ được đọc to nên tránh dùng ký hiệu, emoji, dấu đầu dòng hoặc bảng biểu. "
-                    "Luôn trả lời bằng tiếng Việt, ngắn gọn, súc tích và đi thẳng vào vấn đề."
-                ),
+                "Bạn là trợ lý ảo nữ của ngân hàng, giọng nói thân thiện, chuyên nghiệp và tự nhiên. "
+                "Khi bắt đầu cuộc hội thoại, hãy chủ động chào khách hàng bằng câu ngắn gọn như: "
+                "'Xin chào, em là trợ lý ảo của ngân hàng. Anh/chị cần em hỗ trợ vấn đề gì ạ?' "
+                "Nhiệm vụ của bạn là hỗ trợ khách hàng về các vấn đề ngân hàng như: "
+                "tài khoản thanh toán, tiết kiệm, vay vốn, thẻ tín dụng, chuyển tiền, "
+                "lãi suất, sản phẩm tài chính và các dịch vụ ngân hàng khác. "
+                "Luôn trả lời bằng tiếng Việt, lịch sự, tự nhiên và dễ hiểu. "
+                "Nếu cần tra cứu thông tin cập nhật như lãi suất hoặc chính sách mới nhất, "
+                "hãy nói tự nhiên như: "
+                "'Anh/chị chờ em một chút nhé, em kiểm tra giúp mình ngay ạ.' "
+                "Sau đó mới dùng công cụ tìm kiếm. "
+                "Sau khi có kết quả, chỉ tóm tắt ngắn gọn trong 2 đến 3 câu dễ nghe. "
+                "QUAN TRỌNG - Định dạng trả lời: "
+                "Câu trả lời sẽ được đọc bằng giọng nói, vì vậy TUYỆT ĐỐI KHÔNG dùng: "
+                "danh sách đánh số (1. 2. 3.), gạch đầu dòng, emoji, markdown, bảng biểu. "
+                "Chỉ viết thành câu văn liền mạch, tự nhiên như đang nói chuyện. "
+                "Ví dụ SAI: '1. Tổng tiền vay là 5 tỷ. 2. Lãi suất 8%.' "
+                "Ví dụ ĐÚNG: 'Tổng tiền vay là 5 tỷ với lãi suất 8% mỗi năm.' "
+                "Ưu tiên câu ngắn, hội thoại tự nhiên, giống nhân viên hỗ trợ thật. "
+                "Không trả lời quá dài. "
+                "Luôn đi thẳng vào vấn đề nhưng vẫn giữ sự thân thiện."
+            ),
+            extra={
+                "stop": ["<|im_end|>", "<|endoftext|>", "<|im_start|>"],
+            },
         ),
     )
 
@@ -118,7 +135,9 @@ async def run_bot(transport: BaseTransport):
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),),
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(
+                stop_secs=float(os.getenv("VAD_STOP_SECS", "0.5")),
+            )),),
     )
 
     # Audio recording

@@ -110,13 +110,70 @@ All options are documented in `server/.env.example`. Key variables:
 `OLLAMA_NUM_GPU` is an **Ollama server-side** variable — set it before starting Ollama, not in `.env`:
 
 ```powershell
-# Windows PowerShell
+# Windows PowerShell — temporary (current session only)
 $env:OLLAMA_NUM_GPU="-1"; ollama serve   # -1 = all layers to GPU, 0 = CPU only
 ```
 
 ```bash
 # macOS / Linux
 OLLAMA_NUM_GPU=-1 ollama serve
+```
+
+**Windows — set permanently (persists across reboots):**
+
+```powershell
+# Run PowerShell as Administrator
+[System.Environment]::SetEnvironmentVariable("OLLAMA_NUM_GPU", "-1", "Machine")
+
+# Verify
+[System.Environment]::GetEnvironmentVariable("OLLAMA_NUM_GPU", "Machine")
+# Expected output: -1
+
+# Then restart Ollama (kill and reopen, or restart tray icon)
+Stop-Process -Name "ollama" -Force -ErrorAction SilentlyContinue
+Start-Process ollama -ArgumentList "serve"
+```
+
+Verify GPU is active after starting a model:
+
+```powershell
+ollama ps
+# PROCESSOR column should show "100% GPU"
+```
+
+### GPU Acceleration (VieNeu TTS — `turbo_gpu` mode)
+
+`turbo_gpu` mode requires PyTorch with CUDA. Check your CUDA version first:
+
+```powershell
+nvidia-smi
+```
+
+Then install the matching PyTorch build:
+
+```powershell
+# CUDA 12.1 (most common for RTX 30xx / 40xx)
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# CUDA 11.8
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+Then set in `server/.env`:
+
+```env
+VIENEU_MODE=turbo_gpu
+```
+
+> **Note:** PyTorch CUDA is ~2–3 GB. CPU modes (`turbo`, `standard`) do not require PyTorch.
+
+> **Important — Python version:** PyTorch only supports Python 3.11–3.13. If you recreate the venv (e.g. switching from Python 3.14 to 3.11), PyTorch is **not carried over** — you must reinstall it manually after `uv sync`.
+
+After installing, verify PyTorch is present before running the bot:
+
+```powershell
+uv pip list | Select-String "torch"
+# Must show: torch, torchvision, torchaudio
 ```
 
 ## Model Files

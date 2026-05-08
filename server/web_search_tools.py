@@ -106,6 +106,7 @@ async def handle_web_fetch(params: FunctionCallParams):
         return
 
     title = data.get("title", "")
-    content = data.get("content", "")
-    snippet = content[:1500] + ("..." if len(content) > 1500 else "")
-    await params.result_callback(f"{title}\n\n{snippet}" if snippet else "Không lấy được nội dung.")
+    content = data.get("content", "").replace("\n", " ").strip()
+    snippet = content[:1000] + ("..." if len(content) > 1000 else "")
+    text = f"{title}. {snippet}" if snippet else "Không lấy được nội dung."
+    await params.result_callback(text)
